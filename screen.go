@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"math"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -18,12 +21,15 @@ func init() {
 	}
 
 	w, h = termbox.Size()
+
+	termbox.SetOutputMode(termbox.Output256)
 }
 
 type screen struct {
-	cells []termbox.Cell
-	fg    termbox.Attribute
-	bg    termbox.Attribute
+	cells   []termbox.Cell
+	fg      termbox.Attribute
+	bg      termbox.Attribute
+	raining bool
 }
 
 func newScreen(fg, bg termbox.Attribute) screen {
@@ -51,48 +57,85 @@ func (s screen) display() {
 	termbox.Flush()
 }
 
-func (s screen) border(a termbox.Attribute) {
+func (s screen) border(a termbox.Attribute, rain bool) {
+	c := termbox.Cell{'█', a, termbox.ColorDefault}
+
 	for y := 0; y < h; y++ {
+		if rain {
+			c.Fg = rainbow[y%len(rainbow)]
+		}
+
 		for x := 0; x < w; x++ {
 			if y < 1 || x <= 1 || y > h-2 || x >= w-2 {
-				s.cells[y*w+x] = termbox.Cell{'█', a, termbox.ColorDefault}
+				s.cells[y*w+x] = c
 			}
 		}
 	}
 }
 
-func (s screen) line(y int, line string, a termbox.Attribute) {
+func (s screen) line(y int, line string, a termbox.Attribute, maxLength int) {
 	ox := (w - len(line)) / 2
+
+	if strings.HasPrefix(line, "  ") {
+		ox = (w - maxLength) / 2
+	}
 
 	for x, c := range line {
 		s.cells[y*w+x+ox] = termbox.Cell{c, a, s.bg}
 	}
 }
 
-func (s screen) words(words string) {
+func (s screen) words(words string, rain bool) {
 	lines := strings.Split(words, "\n")
 
 	oy := (h - len(lines)) / 2
 
+	maxLength := 0
+	for _, line := range lines {
+		maxLength = int(math.Max(float64(maxLength), float64(len(line))))
+	}
+
 	for y, line := range lines {
 		a := s.fg
-		if y == 0 {
-			a |= termbox.AttrBold
+
+		if rain {
+			a = rainbow[y%len(rainbow)]
 		}
 
-		s.line(y+oy, line, a)
+		if y == 0 {
+			a |= termbox.AttrUnderline
+		}
+
+		s.line(y+oy, line, a, maxLength)
+	}
+}
+
+func (s screen) page(n, m int) {
+	display := fmt.Sprintf("%d / %d", n, m)
+
+	ox := w - len(display) - 4
+
+	for x, c := range display {
+		s.cells[(h-3)*w+ox+x] = termbox.Cell{c, s.fg, s.bg}
 	}
 }
 
 func (s screen) header(header string) {
-	s.line(2, header, s.fg)
+	s.line(2, header, s.fg, len(header))
 }
 
 func (s screen) footer(footer string) {
-	s.line(h-3, footer, s.fg)
+	s.line(h-3, footer, s.fg, len(footer))
 }
 
-func (s screen) s(next screen) {
+func (s *screen) replace(next screen) {
+	s.cells = next.cells
+	s.fg = next.fg
+	s.bg = next.bg
+	s.raining = false
+}
+
+func (s *screen) s(next screen) {
 	t := time.Duration(wipeTime / int64(h))
 
 	for y := 0; y < h; y++ {
@@ -104,9 +147,11 @@ func (s screen) s(next screen) {
 		termbox.Flush()
 		time.Sleep(t)
 	}
+
+	s.replace(next)
 }
 
-func (s screen) n(next screen) {
+func (s *screen) n(next screen) {
 	t := time.Duration(wipeTime / int64(h))
 
 	for y := h - 1; y >= 0; y-- {
@@ -118,9 +163,11 @@ func (s screen) n(next screen) {
 		termbox.Flush()
 		time.Sleep(t)
 	}
+
+	s.replace(next)
 }
 
-func (s screen) se(next screen) {
+func (s *screen) se(next screen) {
 	t := time.Duration(wipeTime / int64(w+h))
 
 	for i := 0; i < w+h; i++ {
@@ -136,9 +183,11 @@ func (s screen) se(next screen) {
 		termbox.Flush()
 		time.Sleep(t)
 	}
+
+	s.replace(next)
 }
 
-func (s screen) sw(next screen) {
+func (s *screen) sw(next screen) {
 	t := time.Duration(wipeTime / int64(w+h))
 
 	for i := 0; i < w+h; i++ {
@@ -154,4 +203,55 @@ func (s screen) sw(next screen) {
 		termbox.Flush()
 		time.Sleep(t)
 	}
+
+	s.replace(next)
+}
+
+func (s *screen) rain() {
+	s.raining = true
+
+	go func() {
+		type drop struct {
+			x, y int
+			dead bool
+		}
+
+		drops := make([]*drop, 0)
+
+		for s.raining {
+			if rand.Float64() < 0.3 {
+				drops = append(drops, &drop{2 + rand.Intn(w-4), 1, false})
+			}
+
+			for _, drop := range drops {
+				if drop.dead {
+					continue
+				}
+
+				next := s.cells[drop.y*w+drop.x]
+				termbox.SetCell(drop.x, drop.y, '\'', termbox.ColorBlue, next.Bg)
+			}
+
+			termbox.Flush()
+
+			time.Sleep(time.Second / 20)
+
+			for _, drop := range drops {
+				if drop.dead {
+					continue
+				}
+
+				previous := s.cells[drop.y*w+drop.x]
+				termbox.SetCell(drop.x, drop.y, previous.Ch, previous.Fg, previous.Bg)
+
+				drop.y++
+
+				if drop.y >= h-1 {
+					drop.dead = true
+				}
+			}
+		}
+
+		termbox.Sync()
+	}()
 }

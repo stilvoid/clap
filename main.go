@@ -9,34 +9,21 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var script = `Welcome to the thing!`
-
-type pres struct {
-	Header string  `yaml:"header"`
-	Footer string  `yaml:"footer"`
-	Slides []slide `yaml:"slides"`
-}
-
-type slide struct {
+type Slide struct {
 	Header  string `yaml:"header"`
 	Footer  string `yaml:"footer"`
+	Fg      string `yaml:"fg"`
+	Bg      string `yaml:"bg"`
 	Content string `yaml:"content"`
+	Theme   string `yaml:"theme"`
 }
 
-var fgCols = []termbox.Attribute{
-	termbox.ColorRed,
-	termbox.ColorGreen,
-	termbox.ColorYellow,
-	termbox.ColorBlue,
-	termbox.ColorMagenta,
-	termbox.ColorCyan,
-	termbox.ColorWhite,
-}
-
-var bgCols = []termbox.Attribute{
-	termbox.ColorDefault,
-	termbox.ColorBlack,
-	termbox.ColorWhite,
+type Pres struct {
+	Header string  `yaml:"header"`
+	Footer string  `yaml:"footer"`
+	Fg     string  `yaml:"fg"`
+	Bg     string  `yaml:"bg"`
+	Slides []Slide `yaml:"slides"`
 }
 
 func init() {
@@ -46,12 +33,12 @@ func init() {
 func main() {
 	defer termbox.Close()
 
-	f, err := os.Open("slides.yaml")
+	f, err := os.Open(os.Args[1])
 	if err != nil {
 		panic(err)
 	}
 
-	p := pres{}
+	p := Pres{}
 	d := yaml.NewDecoder(f)
 	err = d.Decode(&p)
 	if err != nil {
@@ -59,12 +46,42 @@ func main() {
 	}
 
 	s := newScreen(termbox.ColorWhite, termbox.ColorBlack)
+	s.words("Loading...", false)
+	for i := 0; i < 32; i++ {
+		s.border(termbox.Attribute(rand.Intn(16)), false)
+		s.display()
+		time.Sleep(time.Second / 16)
+	}
+
+	rainbow := false
 
 	for i := 0; i < len(p.Slides); i++ {
 		slide := p.Slides[i]
 
-		next := newScreen(fgCols[rand.Intn(len(fgCols))], bgCols[rand.Intn(len(bgCols))])
-		next.border(fgCols[rand.Intn(len(fgCols))])
+		fgCol, bgCol := s.fg, s.bg
+
+		// Parse colours
+		fg, bg := slide.Fg, slide.Bg
+		if fg == "" {
+			fg = p.Fg
+		}
+		if bg == "" {
+			bg = p.Bg
+		}
+
+		if fg == "rainbow" {
+			rainbow = true
+		} else if fg != "" {
+			fgCol = colours[fg]
+			rainbow = false
+		}
+
+		if bg != "" && bg != "rainbow" {
+			bgCol = colours[bg]
+		}
+
+		next := newScreen(fgCol, bgCol)
+		next.border(fgCol, rainbow)
 
 		h := slide.Header
 		if h == "" {
@@ -82,7 +99,9 @@ func main() {
 			next.footer(f)
 		}
 
-		next.words(slide.Content)
+		next.words(slide.Content, rainbow)
+
+		next.page(i+1, len(p.Slides))
 
 		switch rand.Intn(4) {
 		case 0:
@@ -95,13 +114,20 @@ func main() {
 			s.sw(next)
 		}
 
+		if slide.Theme == "rain" {
+			s.rain()
+		}
+
 		event := termbox.PollEvent()
 
 		if event.Type == termbox.EventKey {
 			if event.Ch == 'q' {
 				return
 			} else if event.Key == termbox.KeyArrowLeft {
-				i -= 2
+				i = i - 2
+				if i < -1 {
+					i = len(p.Slides) + i
+				}
 			}
 		}
 
