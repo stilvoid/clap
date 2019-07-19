@@ -26,17 +26,20 @@ func init() {
 }
 
 type screen struct {
-	cells   []termbox.Cell
-	fg      termbox.Attribute
-	bg      termbox.Attribute
-	raining bool
+	cells     []termbox.Cell
+	fg        termbox.Attribute
+	bg        termbox.Attribute
+	animating bool
+	stopped   bool
 }
 
 func newScreen(fg, bg termbox.Attribute) screen {
 	s := screen{
-		cells: make([]termbox.Cell, w*h),
-		fg:    fg,
-		bg:    bg,
+		cells:     make([]termbox.Cell, w*h),
+		fg:        fg,
+		bg:        bg,
+		animating: false,
+		stopped:   true,
 	}
 
 	for i := 0; i < w*h; i++ {
@@ -57,14 +60,10 @@ func (s screen) display() {
 	termbox.Flush()
 }
 
-func (s screen) border(a termbox.Attribute, rain bool) {
+func (s screen) border(a termbox.Attribute) {
 	c := termbox.Cell{'█', a, termbox.ColorDefault}
 
 	for y := 0; y < h; y++ {
-		if rain {
-			c.Fg = rainbow[y%len(rainbow)]
-		}
-
 		for x := 0; x < w; x++ {
 			if y < 1 || x <= 1 || y > h-2 || x >= w-2 {
 				s.cells[y*w+x] = c
@@ -85,7 +84,7 @@ func (s screen) line(y int, line string, a termbox.Attribute, maxLength int) {
 	}
 }
 
-func (s screen) words(words string, rain bool) {
+func (s screen) words(words string) {
 	lines := strings.Split(words, "\n")
 
 	oy := (h - len(lines)) / 2
@@ -98,12 +97,8 @@ func (s screen) words(words string, rain bool) {
 	for y, line := range lines {
 		a := s.fg
 
-		if rain {
-			a = rainbow[y%len(rainbow)]
-		}
-
 		if y == 0 {
-			a |= termbox.AttrUnderline
+			a |= termbox.AttrBold
 		}
 
 		s.line(y+oy, line, a, maxLength)
@@ -132,7 +127,13 @@ func (s *screen) replace(next screen) {
 	s.cells = next.cells
 	s.fg = next.fg
 	s.bg = next.bg
-	s.raining = false
+	s.animating = false
+
+	for !s.stopped {
+		time.Sleep(time.Second / 10)
+	}
+	s.display()
+	termbox.Sync()
 }
 
 func (s *screen) s(next screen) {
@@ -208,7 +209,8 @@ func (s *screen) sw(next screen) {
 }
 
 func (s *screen) rain() {
-	s.raining = true
+	s.animating = true
+	s.stopped = false
 
 	go func() {
 		type drop struct {
@@ -218,7 +220,7 @@ func (s *screen) rain() {
 
 		drops := make([]*drop, 0)
 
-		for s.raining {
+		for s.animating {
 			if rand.Float64() < 0.3 {
 				drops = append(drops, &drop{2 + rand.Intn(w-4), 1, false})
 			}
@@ -252,6 +254,32 @@ func (s *screen) rain() {
 			}
 		}
 
-		termbox.Sync()
+		s.stopped = true
+	}()
+}
+
+func (s *screen) rainbow() {
+	s.animating = true
+	s.stopped = false
+
+	go func() {
+		count := 0
+
+		for s.animating {
+			for y := 0; y < h; y++ {
+				for x := 0; x < w; x++ {
+					cell := s.cells[y*w+x]
+					termbox.SetCell(x, y, cell.Ch, rainbow[(y+count)%len(rainbow)], cell.Bg)
+				}
+			}
+
+			termbox.Flush()
+
+			time.Sleep(time.Second / 2)
+
+			count++
+		}
+
+		s.stopped = true
 	}()
 }

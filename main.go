@@ -46,14 +46,12 @@ func main() {
 	}
 
 	s := newScreen(termbox.ColorWhite, termbox.ColorBlack)
-	s.words("Loading...", false)
+	s.words("Loading...")
 	for i := 0; i < 32; i++ {
-		s.border(termbox.Attribute(rand.Intn(16)), false)
+		s.border(termbox.Attribute(rand.Intn(16)))
 		s.display()
 		time.Sleep(time.Second / 16)
 	}
-
-	rainbow := false
 
 	for i := 0; i < len(p.Slides); i++ {
 		slide := p.Slides[i]
@@ -69,19 +67,16 @@ func main() {
 			bg = p.Bg
 		}
 
-		if fg == "rainbow" {
-			rainbow = true
-		} else if fg != "" {
+		if fg != "" {
 			fgCol = colours[fg]
-			rainbow = false
 		}
 
-		if bg != "" && bg != "rainbow" {
+		if bg != "" {
 			bgCol = colours[bg]
 		}
 
 		next := newScreen(fgCol, bgCol)
-		next.border(fgCol, rainbow)
+		next.border(fgCol)
 
 		h := slide.Header
 		if h == "" {
@@ -99,7 +94,7 @@ func main() {
 			next.footer(f)
 		}
 
-		next.words(slide.Content, rainbow)
+		next.words(slide.Content)
 
 		next.page(i+1, len(p.Slides))
 
@@ -116,6 +111,8 @@ func main() {
 
 		if slide.Theme == "rain" {
 			s.rain()
+		} else if slide.Theme == "rainbow" {
+			s.rainbow()
 		}
 
 		event := termbox.PollEvent()
