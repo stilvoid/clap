@@ -1,0 +1,24 @@
+header: "Example slides"
+slides:
+  - bg: blue
+    fg: black
+    content: Black on blue
+
+  - bg: yellow
+    content: Retain the foreground, change the background
+
+  - bg: black
+    fg: cyan
+    theme: rain
+    content: Oh noes, it's raining
+
+  - theme: rainbow
+    content: |
+      Such rainbow.
+
+      Multi-line content.
+
+        Indented content
+          keeps
+            its
+              spacing
