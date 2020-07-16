@@ -1,4 +1,4 @@
-package main
+package pres
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ var w, h int
 
 var wipeTime = time.Second.Nanoseconds() / 2
 
-func init() {
+func setup() {
 	err := termbox.Init()
 	if err != nil {
 		panic(err)

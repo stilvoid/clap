@@ -1,4 +1,4 @@
-package main
+package pres
 
 import "github.com/nsf/termbox-go"
 
